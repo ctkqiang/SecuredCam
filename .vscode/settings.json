@@ -73,6 +73,10 @@
         "unordered_map": "cpp",
         "variant": "cpp",
         "vector": "cpp",
-        "__verbose_abort": "cpp"
+        "__verbose_abort": "cpp",
+        "barrier": "cpp",
+        "*.ipp": "cpp",
+        "memory_resource": "cpp",
+        "*.inc": "cpp"
     }
 }

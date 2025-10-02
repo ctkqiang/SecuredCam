@@ -41,7 +41,13 @@ std::vector<Bbox> FaceDetector::detect(const cv::Mat& img) {
         float w = data[i * 6 + 2] * img_w;
         float h = data[i * 6 + 3] * img_h;
 
-        Bbox box = {x, y, w, h, conf};
+        Bbox box = {
+            .x = x,
+            .y = y,
+            .w = w,
+            .h = h,
+            .conf = conf
+        };
         bboxes.push_back(box);
 
         cv_boxes.push_back(cv::Rect((int)(x - w/2), (int)(y - h/2), (int)w, (int)h));
