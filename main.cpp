@@ -1,3 +1,10 @@
+/*
+ * @brief 主程序入口，实现人脸检测、识别和考勤系统功能。
+ *
+ * 本文件包含了程序的入口函数 main，以及摄像头操作、用户管理和实时人脸识别等核心功能。
+ * 旨在提供一个基于 OpenCV 和 ONNX 模型的安全摄像头考勤系统。
+ */
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -9,9 +16,19 @@
 #include "./include/face_recognizer.h"
 #include "./include/vector_db.h"
 
+/*
+ * @brief 文件系统命名空间别名，方便使用。
+ */
 namespace fs = std::filesystem;
 
-// Cross-platform camera opening
+/*
+ * @brief 打开指定设备 ID 的摄像头。
+ *
+ * 根据不同的操作系统，使用不同的 OpenCV 摄像头后端。
+ *
+ * @param device_id 摄像头设备 ID，默认为 0。
+ * @return cv::VideoCapture 摄像头对象。
+ */
 cv::VideoCapture open_camera(int device_id = 0) {
 #ifdef _WIN32
     return cv::VideoCapture(device_id, cv::CAP_DSHOW);
@@ -28,7 +45,14 @@ cv::VideoCapture open_camera(int device_id = 0) {
 #endif
 }
 
-// Scan for an available camera
+/*
+ * @brief 扫描并查找可用的摄像头。
+ *
+ * 尝试打开从 0 开始的设备 ID，直到找到一个可用的摄像头或达到最大扫描次数。
+ *
+ * @param max_scan 最大扫描次数，默认为 5。
+ * @return int 可用摄像头的设备 ID，如果未找到则返回 0 (注意：这里返回0可能表示未找到，也可能表示ID为0的摄像头可用，需要进一步判断)。
+ */
 int find_available_camera(int max_scan = 5) {
     for (int i = 0; i < max_scan; i++) {
         cv::VideoCapture cap = open_camera(i);
@@ -41,7 +65,11 @@ int find_available_camera(int max_scan = 5) {
     return 0;
 }
 
-// List all available cameras
+/*
+ * @brief 列出所有可用的摄像头。
+ *
+ * 扫描从 0 到 4 的设备 ID，并打印出所有成功打开的摄像头 ID。
+ */
 void list_available_cameras() {
     std::cout << "[INFO] 正在扫描可用摄像头..." << std::endl;
     for (int i = 0; i < 5; i++) {
@@ -53,7 +81,18 @@ void list_available_cameras() {
     }
 }
 
-// Add user to the database
+/*
+ * @brief 将用户添加到数据库。
+ *
+ * 从指定图像中检测人脸，提取人脸特征，并将其与用户 ID 和用户名称一起存储到向量数据库中。
+ *
+ * @param db 向量数据库对象。
+ * @param detector 人脸检测器对象。
+ * @param recognizer 人脸识别器对象。
+ * @param user_id 用户的唯一 ID。
+ * @param user_name 用户的名称。
+ * @param img_path 包含用户人脸的图像路径。
+ */
 void add_user_to_db(VectorDB& db, FaceDetector& detector, FaceRecognizer& recognizer,
                     int user_id, const std::string& user_name, const std::string& img_path) {
     if (!fs::exists(img_path)) {
@@ -80,7 +119,17 @@ void add_user_to_db(VectorDB& db, FaceDetector& detector, FaceRecognizer& recogn
     std::cout << "[INFO] 用户 " << user_name << " 已入库" << std::endl;
 }
 
-// Real-time face recognition
+/*
+ * @brief 实时人脸识别考勤系统。
+ *
+ * 打开指定摄像头，实时捕获视频帧，检测人脸，识别人脸并显示考勤信息。
+ * 按 'q' 或 'Q' 键退出。
+ *
+ * @param db 向量数据库对象。
+ * @param detector 人脸检测器对象。
+ * @param recognizer 人脸识别器对象。
+ * @param cam_id 摄像头设备 ID。
+ */
 void check_in_camera(VectorDB& db, FaceDetector& detector, FaceRecognizer& recognizer, int cam_id) {
     cv::VideoCapture cap = open_camera(cam_id);
     if (!cap.isOpened()) {
@@ -118,34 +167,46 @@ void check_in_camera(VectorDB& db, FaceDetector& detector, FaceRecognizer& recog
     cv::destroyAllWindows();
 }
 
+/*
+ * @brief 主函数。
+ *
+ * 初始化模型、摄像头，添加用户到数据库，并启动实时人脸识别考勤系统。
+ *
+ * @return int 程序退出码。
+ */
 int main() {
-    // Model paths relative to project root
+    // 模型文件路径，相对于项目根目录
     fs::path yolov5_model("models/yolov5s-face.onnx");
     fs::path sface_model("models/face_recognition_sface_2021dec.onnx");
 
-    // Check models exist
+    // 检查模型文件是否存在
     if (!fs::exists(yolov5_model) || !fs::exists(sface_model)) {
         std::cerr << "[FATAL] 模型缺失! 请先运行 scripts/generate_model.sh 或 scripts/generate_model.ps1" << std::endl;
         return -1;
     }
 
+    // 列出所有可用摄像头
     list_available_cameras();
 
+    // 查找一个可用的摄像头
     int cam_id = find_available_camera();
     if (cam_id == -1) {
         std::cerr << "[FATAL] 找不到可用摄像头!" << std::endl;
         return -1;
     }
 
+    // 初始化人脸检测器和识别器
     FaceDetector detector(yolov5_model.string());
     FaceRecognizer recognizer(sface_model.string());
     VectorDB db;
 
-
+    // 添加用户到数据库
     add_user_to_db(db, detector, recognizer, 1, "某某人", "mmr.jpg");
 
+    // 启动实时人脸识别考勤系统
     check_in_camera(db, detector, recognizer, cam_id);
 
+    // 保存数据库
     db.save("db");
     std::cout << "[INFO] 数据库已保存" << std::endl;
 
