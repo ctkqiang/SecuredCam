@@ -37,7 +37,8 @@ int find_available_camera(int max_scan = 5) {
             return i;
         }
     }
-    return -1;
+
+    return 0;
 }
 
 // List all available cameras
