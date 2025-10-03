@@ -51,7 +51,7 @@ cv::VideoCapture open_camera(int device_id = 0) {
  * 尝试打开从 0 开始的设备 ID，直到找到一个可用的摄像头或达到最大扫描次数。
  *
  * @param max_scan 最大扫描次数，默认为 5。
- * @return int 可用摄像头的设备 ID，如果未找到则返回 0 (注意：这里返回0可能表示未找到，也可能表示ID为0的摄像头可用，需要进一步判断)。
+ * @return int 可用摄像头的设备 ID，如果未找到则返回 -1。
  */
 int find_available_camera(int max_scan = 5) {
     for (int i = 0; i < max_scan; i++) {
@@ -181,56 +181,76 @@ void check_in_camera(VectorDB& db, FaceDetector& detector, FaceRecognizer& recog
  * @return int 程序退出码。
  */
 int main() {
-    bool models_missing = false;
-    
-    std::cout << "[INFO] OpenCV 版本: " << CV_VERSION << std::endl;
-    
-    if (!cv::dnn::DNN_BACKEND_OPENCV) {
-        std::cerr << "[FATAL] 当前 OpenCV 未启用 DNN 模块支持" << std::endl;
-        return -1;
-    }
-    
-    fs::path yolov5_model("models/yolov5s.onnx");
-    fs::path sface_model("models/face_recognition_sface_2021dec.onnx");
+    try {
+        bool models_missing = false;
+        
+        std::cout << "[INFO] OpenCV 版本: " << CV_VERSION << std::endl;
+        
+        if (!cv::dnn::DNN_BACKEND_OPENCV) {
+            std::cerr << "[FATAL] 当前 OpenCV 未启用 DNN 模块支持" << std::endl;
+            return 0;
+        }
+        
+        fs::path yolov5_model("models/yolov5s.onnx");
+        fs::path sface_model("models/face_recognition_sface_2021dec.onnx");
 
-    
-    if (!fs::exists(yolov5_model)) {
-        std::cerr << "[FATAL] YOLOv5 人脸检测模型缺失: " << yolov5_model << std::endl;
-        models_missing = true;
-    }
-    
-    if (!fs::exists(sface_model)) {
-        std::cerr << "[FATAL] SFace 人脸识别模型缺失: " << sface_model << std::endl;
-        models_missing = true;
-    }
-    
-    if (models_missing) {
-        std::cerr << "\n[提示] 请运行以下命令下载模型：" << std::endl;
-        std::cerr << "  - macOS/Linux: ./scripts/generate_model.sh" << std::endl;
-        std::cerr << "  - Windows: .\\scripts\\generate_model.ps1" << std::endl;
-    
-        return -1;
-    }
+        
+        if (!fs::exists(yolov5_model)) {
+            std::cerr << "[FATAL] YOLOv5 人脸检测模型缺失: " << yolov5_model << std::endl;
+            models_missing = true;
+        }
+        
+        if (!fs::exists(sface_model)) {
+            std::cerr << "[FATAL] SFace 人脸识别模型缺失: " << sface_model << std::endl;
+            models_missing = true;
+        }
+        
+        if (models_missing) {
+            std::cerr << "\n[提示] 请运行以下命令下载模型：" << std::endl;
+            std::cerr << "  - macOS/Linux: ./scripts/generate_model.sh" << std::endl;
+            std::cerr << "  - Windows: .\\scripts\\generate_model.ps1" << std::endl;
+        
+            return -1;
+        }
 
-    list_available_cameras();
+        list_available_cameras();
 
-    int cam_id = find_available_camera();
-    
-    if (cam_id == -1) {
-        std::cerr << "[FATAL] 找不到可用摄像头!" << std::endl;
+        int cam_id = find_available_camera();
+        
+        if (cam_id == -1) {
+            std::cerr << "[FATAL] 找不到可用摄像头!" << std::endl;
+            return 0;
+        }
+
+        std::cout << "[INFO] 正在加载人脸检测模型..." << std::endl;
+        FaceDetector detector(yolov5_model.string());
+        std::cout << "[INFO] 人脸检测模型加载完成" << std::endl;
+        
+        std::cout << "[INFO] 正在加载人脸识别模型..." << std::endl;
+        FaceRecognizer recognizer(sface_model.string());
+        std::cout << "[INFO] 人脸识别模型加载完成" << std::endl;
+        
+        VectorDB db;
+
+        add_user_to_db(db, detector, recognizer, 1, "某某人", "mmr.jpg");
+        check_in_camera(db, detector, recognizer, cam_id);
+
+        db.save("db");
+        std::cout << "[INFO] 数据库已保存" << std::endl;
+
         return 0;
+        
+    } catch (const cv::Exception& e) {
+        std::cerr << "\n[FATAL] OpenCV 异常: " << e.what() << std::endl;
+        std::cerr << "[DEBUG] 错误码: " << e.code << std::endl;
+        std::cerr << "[DEBUG] 文件: " << e.file << ":" << e.line << std::endl;
+        std::cerr << "[DEBUG] 函数: " << e.func << std::endl;
+        return -1;
+    } catch (const std::exception& e) {
+        std::cerr << "\n[FATAL] 标准异常: " << e.what() << std::endl;
+        return -1;
+    } catch (...) {
+        std::cerr << "\n[FATAL] 未知异常" << std::endl;
+        return -1;
     }
-
-    FaceDetector detector(yolov5_model.string());
-    FaceRecognizer recognizer(sface_model.string());
-    VectorDB db;
-
-    add_user_to_db(db, detector, recognizer, 1, "某某人", "mmr.jpg");
-    check_in_camera(db, detector, recognizer, cam_id);
-
-
-    db.save("db");
-    std::cout << "[INFO] 数据库已保存" << std::endl;
-
-    return 0;
 }
