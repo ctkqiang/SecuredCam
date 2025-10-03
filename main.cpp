@@ -93,8 +93,14 @@ void list_available_cameras() {
  * @param user_name 用户的名称。
  * @param img_path 包含用户人脸的图像路径。
  */
-void add_user_to_db(VectorDB& db, FaceDetector& detector, FaceRecognizer& recognizer,
-                    int user_id, const std::string& user_name, const std::string& img_path) {
+void add_user_to_db(
+    VectorDB& db, 
+    FaceDetector& detector, 
+    FaceRecognizer& recognizer, 
+    int user_id, 
+    const std::string& user_name, 
+    const std::string& img_path
+) {
     if (!fs::exists(img_path)) {
         std::cerr << "[ERROR] 用户图像不存在: " << img_path << std::endl;
         return;
