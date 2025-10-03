@@ -8,10 +8,15 @@
 FaceDetector::FaceDetector(const std::string& model_path) {  
     net = cv::dnn::readNetFromONNX(model_path);  
     net.setPreferableBackend(cv::dnn::DNN_BACKEND_OPENCV);  
-
-    // 若有GPU可换DNN_TARGET_CUDA? 
     net.setPreferableTarget(cv::dnn::DNN_TARGET_CPU); 
 }  
+
+/**
+ * @brief 构造函数，使用预配置的 Net 对象
+ * 
+ * @param net 预配置的 OpenCV DNN Net 对象
+ */
+FaceDetector::FaceDetector(const cv::dnn::Net& net) : net(net) {}
 
 std::vector<Bbox> FaceDetector::detect(const cv::Mat& img) {
     std::vector<Bbox> bboxes;
@@ -25,21 +30,25 @@ std::vector<Bbox> FaceDetector::detect(const cv::Mat& img) {
     cv::dnn::blobFromImage(img, blob, 1/255.0, cv::Size(640, 640), cv::Scalar(0,0,0), true, false);
     net.setInput(blob);
 
-    std::vector<cv::Mat> outputs;
-    net.forward(outputs, net.getUnconnectedOutLayersNames());
+    cv::Mat output;
+    net.forward(output);
 
-    float* data = (float*)outputs[0].data;
-    int rows = outputs[0].rows;
+    cv::Mat det = output.reshape(1, output.total() / 85);
 
-    for (int i = 0; i < rows; ++i) {
-        
-        float conf = data[i * 6 + 4];
+    for (int i = 0; i < det.rows; i++) {
+        float conf = det.at<float>(i, 4);
         if (conf < conf_threshold) continue;
 
-        float x = data[i * 6 + 0] * img_w;
-        float y = data[i * 6 + 1] * img_h;
-        float w = data[i * 6 + 2] * img_w;
-        float h = data[i * 6 + 3] * img_h;
+        float x = det.at<float>(i, 0);
+        float y = det.at<float>(i, 1);
+        float w = det.at<float>(i, 2);
+        float h = det.at<float>(i, 3);
+
+        // 将相对坐标转换为绝对坐标
+        x = x * img_w;
+        y = y * img_h;
+        w = w * img_w;
+        h = h * img_h;
 
         Bbox box = {
             .x = x,
@@ -58,7 +67,6 @@ std::vector<Bbox> FaceDetector::detect(const cv::Mat& img) {
     cv::dnn::NMSBoxes(cv_boxes, scores, conf_threshold, nms_threshold, indices);
 
     std::vector<Bbox> result;
-
     for (int idx : indices) {
         result.push_back(bboxes[idx]);
     }

@@ -14,5 +14,6 @@ class FaceDetector {
 
     public:
         FaceDetector(const std::string& model_path);
+        FaceDetector(const cv::dnn::Net& net);  // 新增构造函数
         std::vector<Bbox> detect(const cv::Mat& frame_img);
 };
