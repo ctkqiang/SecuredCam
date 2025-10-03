@@ -62,7 +62,7 @@ int find_available_camera(int max_scan = 5) {
         }
     }
 
-    return 0;
+    return -1;
 }
 
 /*
@@ -181,38 +181,54 @@ void check_in_camera(VectorDB& db, FaceDetector& detector, FaceRecognizer& recog
  * @return int 程序退出码。
  */
 int main() {
-    // 模型文件路径，相对于项目根目录
-    fs::path yolov5_model("models/yolov5s-face.onnx");
+    bool models_missing = false;
+    
+    std::cout << "[INFO] OpenCV 版本: " << CV_VERSION << std::endl;
+    
+    if (!cv::dnn::DNN_BACKEND_OPENCV) {
+        std::cerr << "[FATAL] 当前 OpenCV 未启用 DNN 模块支持" << std::endl;
+        return -1;
+    }
+    
+    fs::path yolov5_model("models/yolov5s.onnx");
     fs::path sface_model("models/face_recognition_sface_2021dec.onnx");
 
-    // 检查模型文件是否存在
-    if (!fs::exists(yolov5_model) || !fs::exists(sface_model)) {
-        std::cerr << "[FATAL] 模型缺失! 请先运行 scripts/generate_model.sh 或 scripts/generate_model.ps1" << std::endl;
+    
+    if (!fs::exists(yolov5_model)) {
+        std::cerr << "[FATAL] YOLOv5 人脸检测模型缺失: " << yolov5_model << std::endl;
+        models_missing = true;
+    }
+    
+    if (!fs::exists(sface_model)) {
+        std::cerr << "[FATAL] SFace 人脸识别模型缺失: " << sface_model << std::endl;
+        models_missing = true;
+    }
+    
+    if (models_missing) {
+        std::cerr << "\n[提示] 请运行以下命令下载模型：" << std::endl;
+        std::cerr << "  - macOS/Linux: ./scripts/generate_model.sh" << std::endl;
+        std::cerr << "  - Windows: .\\scripts\\generate_model.ps1" << std::endl;
+    
         return -1;
     }
 
-    // 列出所有可用摄像头
     list_available_cameras();
 
-    // 查找一个可用的摄像头
     int cam_id = find_available_camera();
+    
     if (cam_id == -1) {
         std::cerr << "[FATAL] 找不到可用摄像头!" << std::endl;
-        return -1;
+        return 0;
     }
 
-    // 初始化人脸检测器和识别器
     FaceDetector detector(yolov5_model.string());
     FaceRecognizer recognizer(sface_model.string());
     VectorDB db;
 
-    // 添加用户到数据库
     add_user_to_db(db, detector, recognizer, 1, "某某人", "mmr.jpg");
-
-    // 启动实时人脸识别考勤系统
     check_in_camera(db, detector, recognizer, cam_id);
 
-    // 保存数据库
+
     db.save("db");
     std::cout << "[INFO] 数据库已保存" << std::endl;
 

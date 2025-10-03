@@ -23,7 +23,7 @@ run: check_models all
 	./$(BUILD_DIR)/$(PROJECT_NAME)
 
 check_models:
-	@if [ ! -d models ] || [ ! -f models/yolov5s-face.onnx ] || [ ! -f models/face_recognition_sface_2021dec.onnx ]; then \
+	@if [ ! -d models ] || [ ! -f models/yolov5s.onnx ] || [ ! -f models/face_recognition_sface_2021dec.onnx ]; then \
 		echo "[INFO] 模型缺失，正在生成..."; \
 		$(MODEL_SCRIPT); \
 	else \

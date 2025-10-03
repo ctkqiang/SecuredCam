@@ -77,6 +77,20 @@
         "barrier": "cpp",
         "*.ipp": "cpp",
         "memory_resource": "cpp",
-        "*.inc": "cpp"
+        "*.inc": "cpp",
+        "numbers": "cpp",
+        "hash_map": "cpp",
+        "hash_set": "cpp",
+        "regex": "cpp",
+        "span": "cpp",
+        "unordered_set": "cpp",
+        "valarray": "cpp",
+        "slist": "cpp",
+        "flat_map": "cpp",
+        "flat_set": "cpp",
+        "generator": "cpp",
+        "ranges": "cpp",
+        "stacktrace": "cpp",
+        "text_encoding": "cpp"
     }
 }

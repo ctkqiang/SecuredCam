@@ -2,8 +2,8 @@
 
 MODELS_DIR="./models"
 YOLO_REPO_DIR="./yolov5"
-PT_FILE="yolov5s-face.pt"
-ONNX_FILE="yolov5s-face.onnx"
+PT_FILE="yolov5s.pt"
+ONNX_FILE="yolov5s.onnx"
 SFACE_FILE="face_recognition_sface_2021dec.onnx"
 
 echo "=================================================="
@@ -21,9 +21,31 @@ else
 fi
 
 # 下载 YOLOv5s .pt 权重
+download_pt_model() {
+    local urls=(
+        "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5s.pt"
+    )
+    
+    for url in "${urls[@]}"; do
+        echo "[INFO] 尝试从 $url 下载模型..."
+        if wget -c "$url" -O "$MODELS_DIR/$PT_FILE" 2>/dev/null; then
+            echo "[INFO] 成功下载 YOLOv5s 权重"
+            return 0
+        fi
+    done
+    
+    echo "[错误] 所有下载源均失败"
+    return 1
+}
+
 if [ ! -f "$MODELS_DIR/$PT_FILE" ]; then
-    wget -c "https://huggingface.co/Ultralytics/YOLOv5/resolve/main/yolov5s.pt" -O "$MODELS_DIR/$PT_FILE" \
-        || { echo "[错误] 下载 YOLOv5s 权重失败"; exit 1; }
+    download_pt_model || { 
+        echo "[提示] 请手动下载 YOLOv5s 模型:";
+        echo "1. 访问: https://github.com/ultralytics/yolov5/releases/tag/v7.0";
+        echo "2. 下载 yolov5s.pt";
+        echo "3. 将文件放置在 $MODELS_DIR/ 目录下";
+        exit 1;
+    }
 else
     echo "[INFO] 已存在: $MODELS_DIR/$PT_FILE"
 fi
@@ -43,26 +65,24 @@ if [ ! -f "$MODELS_DIR/$ONNX_FILE" ]; then
     pip install -r requirements.txt >/dev/null
 
     echo "[INFO] 正在导出 ONNX 模型..."
-    python3 export.py --weights "../$MODELS_DIR/$PT_FILE" --include onnx --dynamic \
+    python3 export.py --weights "../$MODELS_DIR/$PT_FILE" --include onnx --dynamic --opset 12 \
         || { 
-            echo "[WARN] export.py 导出失败，尝试直接下载 ONNX 模型"; 
-            cd ..
-            wget -c "https://huggingface.co/amd/yolov5s/resolve/main/yolov5s.onnx" -O "$MODELS_DIR/$ONNX_FILE" \
-                || { echo "[错误] 下载 ONNX 模型失败"; exit 1; }
-            echo "[INFO] 已通过下载获取 ONNX 模型"
-            exit 0
+            echo "[ERROR] export.py 导出失败，请检查 Python/torch/onnx 依赖并重试"; 
+            echo "[提示] 你也可以手动导出: cd yolov5 && python3 export.py --weights ../models/yolov5s.pt --include onnx --dynamic --opset 12";
+            deactivate 2>/dev/null || true;
+            cd ..;
+            exit 1;
         }
 
-    ONNX_TMP=$(find . -maxdepth 2 -name "*.onnx" | head -n 1)
-    if [ -f "$ONNX_TMP" ]; then
-        mv "$ONNX_TMP" "../$MODELS_DIR/$ONNX_FILE"
-        echo "[INFO] 已生成 ONNX 模型: $MODELS_DIR/$ONNX_FILE"
+    if [ -f "../$MODELS_DIR/$ONNX_FILE" ]; then
+        echo "[INFO] ONNX 模型已成功导出: $MODELS_DIR/$ONNX_FILE"
     else
-        echo "[WARN] 未生成 ONNX 模型，尝试下载"
+        echo "[ERROR] ONNX 模型导出失败"
         cd ..
-        wget -c "https://huggingface.co/amd/yolov5s/resolve/main/yolov5s.onnx" -O "$MODELS_DIR/$ONNX_FILE" \
-            || { echo "[错误] 下载 ONNX 模型失败"; exit 1; }
-        echo "[INFO] 已通过下载获取 ONNX 模型"
+        echo "[ERROR] 未发现导出的 ONNX 文件，请重试导出步骤";
+        deactivate 2>/dev/null || true;
+        cd ..;
+        exit 1;
     fi
 
     deactivate
@@ -71,6 +91,52 @@ else
     echo "[INFO] 已存在: $MODELS_DIR/$ONNX_FILE"
 fi
 
-echo "=================================================="
-echo " 模型已准备完成，保存在 $MODELS_DIR/"
-echo "=================================================="
+# 验证模型文件完整性
+verify_models() {
+    local expected_sface_size=38696353  # SFace 模型预期大小（字节）
+    local expected_pt_min=14000000      # YOLOv5s.pt 预期大小下限（字节）
+    local expected_pt_max=16000000      # YOLOv5s.pt 预期大小上限（字节）
+    
+    echo "[INFO] 验证模型文件完整性..."
+    
+    # 验证 SFace 模型
+    if [ -f "$MODELS_DIR/$SFACE_FILE" ]; then
+        local sface_size=$(wc -c < "$MODELS_DIR/$SFACE_FILE")
+        if [ "$sface_size" -eq "$expected_sface_size" ]; then
+            echo "[INFO] SFace 模型验证通过"
+        else
+            echo "[WARN] SFace 模型大小异常，可能已损坏"
+            return 1
+        fi
+    else
+        echo "[ERROR] SFace 模型文件缺失"
+        return 1
+    fi
+    
+    # 验证 YOLOv5s 模型
+    if [ -f "$MODELS_DIR/$PT_FILE" ]; then
+        local pt_size=$(wc -c < "$MODELS_DIR/$PT_FILE")
+        if [ "$pt_size" -ge "$expected_pt_min" ] && [ "$pt_size" -le "$expected_pt_max" ]; then
+            echo "[INFO] YOLOv5s 模型验证通过"
+        else
+            echo "[WARN] YOLOv5s 模型大小异常，可能需要重新下载"
+            return 1
+        fi
+    else
+        echo "[ERROR] YOLOv5s 模型文件缺失"
+        return 1
+    fi
+    
+    return 0
+}
+
+verify_models
+if [ $? -eq 0 ]; then
+    echo "=================================================="
+    echo " 模型已准备完成，保存在 $MODELS_DIR/"
+    echo "=================================================="
+else
+    echo "=================================================="
+    echo " [警告] 模型文件可能存在问题，请考虑重新下载或重新导出 ONNX"
+    echo "=================================================="
+fi
