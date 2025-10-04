@@ -112,13 +112,26 @@ void add_user_to_db(
         return;
     }
 
+    if (img.cols < 64 || img.rows < 64) {
+        std::cerr << "[ERROR] 图像尺寸太小: " << img_path << std::endl;
+        return;
+    }
+
     auto bboxes = detector.detect(img);
     if (bboxes.empty()) {
         std::cerr << "[ERROR] 未检测到人脸: " << img_path << std::endl;
         return;
     }
+    
+    cv::Rect face_rect = bboxes[0].toRect();
+    face_rect &= cv::Rect(0, 0, img.cols, img.rows);
+    
+    if (face_rect.area() <= 0) {
+        std::cerr << "[ERROR] 人脸区域无效: " << img_path << std::endl;
+        return;
+    }
 
-    cv::Mat face = img(bboxes[0].toRect()).clone();
+    cv::Mat face = img(face_rect).clone();
     cv::Mat feature = recognizer.extract_feature(face, bboxes[0]);
     db.add_user(user_id, user_name, feature);
 
@@ -193,7 +206,6 @@ int main() {
         
         fs::path yolov5_model("models/yolov5s.onnx");
         fs::path sface_model("models/face_recognition_sface_2021dec.onnx");
-
         
         if (!fs::exists(yolov5_model)) {
             std::cerr << "[FATAL] YOLOv5 人脸检测模型缺失: " << yolov5_model << std::endl;
@@ -209,7 +221,6 @@ int main() {
             std::cerr << "\n[提示] 请运行以下命令下载模型：" << std::endl;
             std::cerr << "  - macOS/Linux: ./scripts/generate_model.sh" << std::endl;
             std::cerr << "  - Windows: .\\scripts\\generate_model.ps1" << std::endl;
-        
             return -1;
         }
 
@@ -232,7 +243,12 @@ int main() {
         
         VectorDB db;
 
-        add_user_to_db(db, detector, recognizer, 1, "某某人", "mmr.jpg");
+        // 跳过不存在的用户图像，直接进入摄像头检测模式
+        fs::path user_image("mmr.jpg");
+        if (fs::exists(user_image)) {
+            add_user_to_db(db, detector, recognizer, 1, "某某人", user_image.string());
+        }
+
         check_in_camera(db, detector, recognizer, cam_id);
 
         db.save("db");
