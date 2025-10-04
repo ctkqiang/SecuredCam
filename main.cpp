@@ -1,4 +1,4 @@
-/*
+/**
  * @brief 主程序入口，实现人脸检测、识别和考勤系统功能。
  *
  * 本文件包含了程序的入口函数 main，以及摄像头操作、用户管理和实时人脸识别等核心功能。
@@ -16,12 +16,12 @@
 #include "./include/face_recognizer.h"
 #include "./include/vector_db.h"
 
-/*
+/**
  * @brief 文件系统命名空间别名，方便使用。
  */
 namespace fs = std::filesystem;
 
-/*
+/**
  * @brief 打开指定设备 ID 的摄像头。
  *
  * 根据不同的操作系统，使用不同的 OpenCV 摄像头后端。
@@ -45,7 +45,7 @@ cv::VideoCapture open_camera(int device_id = 0) {
 #endif
 }
 
-/*
+/**
  * @brief 扫描并查找可用的摄像头。
  *
  * 尝试打开从 0 开始的设备 ID，直到找到一个可用的摄像头或达到最大扫描次数。
@@ -65,7 +65,7 @@ int find_available_camera(int max_scan = 5) {
     return -1;
 }
 
-/*
+/**
  * @brief 列出所有可用的摄像头。
  *
  * 扫描从 0 到 4 的设备 ID，并打印出所有成功打开的摄像头 ID。
@@ -81,7 +81,7 @@ void list_available_cameras() {
     }
 }
 
-/*
+/**
  * @brief 将用户添加到数据库。
  *
  * 从指定图像中检测人脸，提取人脸特征，并将其与用户 ID 和用户名称一起存储到向量数据库中。
@@ -125,7 +125,7 @@ void add_user_to_db(
     std::cout << "[INFO] 用户 " << user_name << " 已入库" << std::endl;
 }
 
-/*
+/***
  * @brief 实时人脸识别考勤系统。
  *
  * 打开指定摄像头，实时捕获视频帧，检测人脸，识别人脸并显示考勤信息。
@@ -173,7 +173,7 @@ void check_in_camera(VectorDB& db, FaceDetector& detector, FaceRecognizer& recog
     cv::destroyAllWindows();
 }
 
-/*
+/**
  * @brief 主函数。
  *
  * 初始化模型、摄像头，添加用户到数据库，并启动实时人脸识别考勤系统。

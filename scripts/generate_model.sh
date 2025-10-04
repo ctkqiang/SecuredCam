@@ -5,6 +5,7 @@ YOLO_REPO_DIR="./yolov5"
 PT_FILE="yolov5s.pt"
 ONNX_FILE="yolov5s.onnx"
 SFACE_FILE="face_recognition_sface_2021dec.onnx"
+YOLO_VERSION="v7.0"  # 使用最新稳定版本
 
 echo "=================================================="
 echo " SecuredCam 模型下载与准备工具"
@@ -23,7 +24,7 @@ fi
 # 下载 YOLOv5s .pt 权重
 download_pt_model() {
     local urls=(
-        "https://github.com/ultralytics/yolov5/releases/download/v7.0/yolov5s.pt"
+        "https://github.com/ultralytics/yolov5/releases/download/$YOLO_VERSION/yolov5s.pt"
     )
     
     for url in "${urls[@]}"; do
@@ -41,9 +42,8 @@ download_pt_model() {
 if [ ! -f "$MODELS_DIR/$PT_FILE" ]; then
     download_pt_model || { 
         echo "[提示] 请手动下载 YOLOv5s 模型:";
-        echo "1. 访问: https://github.com/ultralytics/yolov5/releases/tag/v7.0";
+        echo "1. 访问: https://github.com/ultralytics/yolov5/releases/tag/$YOLO_VERSION";
         echo "2. 下载 yolov5s.pt";
-        echo "3. 将文件放置在 $MODELS_DIR/ 目录下";
         exit 1;
     }
 else
@@ -58,28 +58,70 @@ if [ ! -f "$MODELS_DIR/$ONNX_FILE" ]; then
     fi
 
     cd "$YOLO_REPO_DIR" || { echo "[错误] 进入 $YOLO_REPO_DIR 失败"; exit 1; }
+    
+    # 切换到指定版本
+    git fetch --tags --depth=1 || { echo "[错误] 获取 YOLOv5 标签失败"; exit 1; }
+    git checkout "$YOLO_VERSION" || { 
+        echo "[错误] 切换到 YOLOv5 版本 $YOLO_VERSION 失败";
+        cd ..;
+        exit 1;
+    }
 
+    # 创建并激活虚拟环境
     python3 -m venv venv || { echo "[错误] 创建 venv 失败"; exit 1; }
     source venv/bin/activate
+
+    # 安装特定版本的依赖
     pip install --upgrade pip >/dev/null
+    pip install torch==2.0.1 torchvision==0.15.2 >/dev/null
     pip install -r requirements.txt >/dev/null
+    pip install onnx==1.14.0 >/dev/null
 
     echo "[INFO] 正在导出 ONNX 模型..."
-    python3 export.py --weights "../$MODELS_DIR/$PT_FILE" --include onnx --dynamic --opset 12 \
+    echo "[DEBUG] 当前目录: $(pwd)"
+    echo "[DEBUG] 模型路径: ../$MODELS_DIR/$PT_FILE"
+    echo "[DEBUG] YOLOv5 版本: $YOLO_VERSION"
+    
+    # 添加安全全局变量并导出模型
+    python3 -c "
+import torch
+torch.serialization.add_safe_globals(['numpy.core.multiarray._reconstruct'])
+" || true
+
+    # 修改导出参数，使用更低的 opset 版本，固定输入尺寸，简化模型结构
+    python3 export.py --weights "../$MODELS_DIR/$PT_FILE" \
+                     --include onnx \
+                     --opset 9 \
+                     --imgsz 640 \
+                     --simplify \
         || { 
             echo "[ERROR] export.py 导出失败，请检查 Python/torch/onnx 依赖并重试"; 
-            echo "[提示] 你也可以手动导出: cd yolov5 && python3 export.py --weights ../models/yolov5s.pt --include onnx --dynamic --opset 12";
+            echo "[提示] 你也可以手动导出: cd yolov5 && python3 export.py --weights ../models/yolov5s.pt --include onnx --opset 9 --imgsz 640 --simplify";
             deactivate 2>/dev/null || true;
             cd ..;
             exit 1;
         }
 
-    if [ -f "../$MODELS_DIR/$ONNX_FILE" ]; then
+    echo "[DEBUG] 导出后目录内容:"
+    ls -la
+
+    # 查找并移动导出的模型
+    EXPORTED_ONNX=$(find . -maxdepth 1 -name "*.onnx" -type f)
+    if [ -n "$EXPORTED_ONNX" ]; then
+        echo "[DEBUG] 找到导出的模型文件: $EXPORTED_ONNX"
+        mv "$EXPORTED_ONNX" "../$MODELS_DIR/$ONNX_FILE" || {
+            echo "[ERROR] 移动 ONNX 文件失败";
+            echo "[DEBUG] 目标目录状态:"
+            ls -la "../$MODELS_DIR"
+            deactivate 2>/dev/null || true;
+            cd ..;
+            exit 1;
+        }
         echo "[INFO] ONNX 模型已成功导出: $MODELS_DIR/$ONNX_FILE"
     else
-        echo "[ERROR] ONNX 模型导出失败"
-        cd ..
-        echo "[ERROR] 未发现导出的 ONNX 文件，请重试导出步骤";
+        echo "[ERROR] ONNX 模型导出失败，未找到 .onnx 文件"
+        echo "[DEBUG] 当前目录内容:"
+        ls -la
         deactivate 2>/dev/null || true;
         cd ..;
         exit 1;
@@ -130,8 +172,7 @@ verify_models() {
     return 0
 }
 
-verify_models
-if [ $? -eq 0 ]; then
+if verify_models; then
     echo "=================================================="
     echo " 模型已准备完成，保存在 $MODELS_DIR/"
     echo "=================================================="
